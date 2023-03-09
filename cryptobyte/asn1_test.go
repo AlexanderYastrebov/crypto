@@ -7,6 +7,7 @@ package cryptobyte
 import (
 	"bytes"
 	encoding_asn1 "encoding/asn1"
+	"fmt"
 	"math/big"
 	"reflect"
 	"testing"
@@ -259,12 +260,14 @@ func TestReadASN1IntegerInvalid(t *testing.T) {
 	}
 }
 
+type readASN1ObjectIdentifierTest struct {
+	in  []byte
+	ok  bool
+	out []int
+}
+
 func TestASN1ObjectIdentifier(t *testing.T) {
-	testData := []struct {
-		in  []byte
-		ok  bool
-		out []int
-	}{
+	testData := []readASN1ObjectIdentifierTest{
 		{[]byte{}, false, []int{}},
 		{[]byte{6, 0}, false, []int{}},
 		{[]byte{5, 1, 85}, false, []int{2, 5}},
@@ -275,29 +278,36 @@ func TestASN1ObjectIdentifier(t *testing.T) {
 		{[]byte{6, 7, 85, 0x02, 0xc0, 0x80, 0x80, 0x80, 0x80}, false, []int{}},
 		{[]byte{6, 7, 85, 0x02, 0x85, 0xc7, 0xcc, 0xfb, 0x01}, true, []int{2, 5, 2, 1492336001}},
 		{[]byte{6, 7, 0x55, 0x02, 0x87, 0xff, 0xff, 0xff, 0x7f}, true, []int{2, 5, 2, 2147483647}}, // 2**31-1
-		{[]byte{6, 7, 0x55, 0x02, 0x88, 0x80, 0x80, 0x80, 0x00}, false, []int{}},                   // 2**31
 	}
 
 	for i, test := range testData {
-		in := String(test.in)
-		var out encoding_asn1.ObjectIdentifier
-		ok := in.ReadASN1ObjectIdentifier(&out)
-		if ok != test.ok || ok && !out.Equal(test.out) {
-			t.Errorf("#%d: in.ReadASN1ObjectIdentifier() = %v, want %v; out = %v, want %v", i, ok, test.ok, out, test.out)
-			continue
-		}
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			testASN1ObjectIdentifier(t, test)
+		})
+	}
+}
 
-		var b Builder
-		b.AddASN1ObjectIdentifier(out)
-		result, err := b.Bytes()
-		if builderOk := err == nil; test.ok != builderOk {
-			t.Errorf("#%d: error from Builder.Bytes: %s", i, err)
-			continue
-		}
-		if test.ok && !bytes.Equal(result, test.in) {
-			t.Errorf("#%d: reserialisation didn't match, got %x, want %x", i, result, test.in)
-			continue
-		}
+func testASN1ObjectIdentifier(t *testing.T, test readASN1ObjectIdentifierTest) {
+	t.Helper()
+
+	in := String(test.in)
+	var out encoding_asn1.ObjectIdentifier
+	ok := in.ReadASN1ObjectIdentifier(&out)
+	if ok != test.ok || ok && !out.Equal(test.out) {
+		t.Errorf("in.ReadASN1ObjectIdentifier() = %v, want %v; out = %v, want %v", ok, test.ok, out, test.out)
+		return
+	}
+
+	var b Builder
+	b.AddASN1ObjectIdentifier(out)
+	result, err := b.Bytes()
+	if builderOk := err == nil; test.ok != builderOk {
+		t.Errorf("error from Builder.Bytes: %s", err)
+		return
+	}
+	if test.ok && !bytes.Equal(result, test.in) {
+		t.Errorf("reserialisation didn't match, got %x, want %x", result, test.in)
+		return
 	}
 }
 
